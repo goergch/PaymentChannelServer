@@ -1,0 +1,221 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "title": "PaymentChannelServer.",
+        "version": "1.0.0"
+    },
+    "host": "localhost:8085",
+    "schemes": [
+        "http"
+    ],
+    "basePath": "/v1",
+    "consumes": [
+        "application/json"
+    ],
+    "produces": [
+        "application/json",
+        "text/plain"
+    ],
+    "paths": {
+        "/invoices": {
+            "post": {
+                "summary": "Add one new invoice.",
+                "operationId": "addInvoice",
+                "parameters": [
+                    {
+                        "name": "invoice",
+                        "description": "one new invoice",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/Invoice"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "id of new invoice",
+                        "schema": {
+                            "$ref": "#/definitions/Invoice"
+                        },
+                        "headers": {
+                            "Location": {
+                                "description": "the absolute path to the created resource",
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "503": {
+                        "description": "service unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                }
+            },
+            "get": {
+                "summary": "The invoices endpoint returns a list of all known invoices ids.",
+                "operationId": "getInvoices",
+                "responses": {
+                    "200": {
+                        "description": "an array of invoice ids",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "format": "uuid",
+                                "description": "unique id of the invoice assigned by payment service"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/invoices/{invoiceId}": {
+            "get": {
+                "summary": "Returns information about the invoice to the provided id.",
+                "operationId": "getInvoiceById",
+                "parameters": [
+                    {
+                        "name": "invoiceId",
+                        "in": "path",
+                        "type": "string",
+                        "format": "uuid",
+                        "required": true,
+                        "description": "the invoice id to get the information for"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "returns the information about the invoice",
+                        "schema": {
+                            "$ref": "#/definitions/Invoice"
+                        }
+                    },
+                    "404": {
+                        "description": "invoice not found",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "summary": "Deletes the invoice to the provided ID.",
+                "operationId": "deleteInvoiceById",
+                "parameters": [
+                    {
+                        "name": "invoiceId",
+                        "in": "path",
+                        "type": "string",
+                        "format": "uuid",
+                        "required": true,
+                        "description": "the id of the invoice to delete"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "invoice deleted"
+                    },
+                    "404": {
+                        "description": "invoice not found",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/invoices/{invoiceId}/state": {
+            "get": {
+                "summary": "Returns a confidence object that describes the state of the incoming tx.",
+                "operationId": "getInvoiceState",
+                "parameters": [
+                    {
+                        "name": "invoiceId",
+                        "in": "path",
+                        "type": "string",
+                        "format": "uuid",
+                        "required": true,
+                        "description": "the invoice id to get the state for"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "returns the state object of the incoming tx",
+                        "schema": {
+                            "$ref": "#/definitions/State"
+                        }
+                    },
+                    "404": {
+                        "description": "invoice not found",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "Invoice": {
+            "type": "object",
+            "properties": {
+                "totalAmount": {
+                    "type": "integer",
+                    "format": "int64",
+                    "description": "total amount of Satoshis that are requested to be paid"
+                },
+                "expiration": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "date after which this invoice is no longer valid'"
+                },
+                "invoiceId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "unique id of the invoice assigned by payment service"
+                },
+                "referenceId": {
+                    "type": "string",
+                    "description": "id defined by the client for its internal reference, which is just stored and passed but not processed by the payment service"
+                }
+            }
+        },
+        "State": {
+            "description": "invoice confidence state",
+            "type": "object",
+            "properties": {
+                "state": {
+                    "type": "string",
+                    "description": "confidence state",
+                    "default": "unpaid",
+                    "enum": [
+                        "unpaid",
+                        "paid"
+                    ]
+                },
+                "depthInBlocks": {
+                    "type": "integer",
+                    "format": "int32",
+                    "description": "depth of a building transaction in blocks"
+                }
+            }
+        },
+        "Error": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "description": "meaningful error message"
+                }
+            }
+        }
+    }
+}
