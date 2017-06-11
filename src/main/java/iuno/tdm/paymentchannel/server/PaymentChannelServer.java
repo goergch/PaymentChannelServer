@@ -5,6 +5,8 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.ByteString;
+import io.swagger.model.Invoice;
+import io.swagger.model.State;
 import org.bitcoinj.core.*;
 import org.bitcoinj.core.listeners.DownloadProgressTracker;
 import org.bitcoinj.crypto.MnemonicCode;
@@ -26,8 +28,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -46,6 +47,8 @@ public class PaymentChannelServer implements PaymentChannelServerListener.Handle
     private static final Logger logger = LoggerFactory.getLogger(PaymentChannelServer.class);
     private DateTime lastCleanup = DateTime.now();
     private DeterministicSeed randomSeed;
+
+    private HashMap<UUID, PaymentChannelInvoice> channelInvoices = new HashMap<>();
 
     private PaymentChannelServer(){
         BriefLogFormatter.initWithSilentBitcoinJ();
@@ -187,6 +190,67 @@ public class PaymentChannelServer implements PaymentChannelServerListener.Handle
         logger.info("wallet receive address: " + wallet.currentReceiveAddress());
     }
 
+    public boolean isRunning() {
+        return ((null != peerGroup) && (0 < peerGroup.numConnectedPeers()));
+    }
+
+
+    public UUID addInvoice(Invoice invoice){
+        UUID invoiceId = UUID.randomUUID();
+        invoice.setInvoiceId(invoiceId);
+        PaymentChannelInvoice paymentChannelInvoice = new PaymentChannelInvoice(invoice);
+        channelInvoices.put(invoiceId,paymentChannelInvoice);
+        return invoiceId;
+    }
+
+    public void deleteInvoiceById(UUID invoiceId){
+        if(!channelInvoices.containsKey(invoiceId)){
+            throw new NullPointerException("No invoice with this id");
+        }
+        channelInvoices.remove(invoiceId);
+    }
+
+
+    public Invoice getInvoiceById(UUID invoiceId){
+        if(!channelInvoices.containsKey(invoiceId)){
+            throw new NullPointerException("No invoice with this id");
+        }
+        return channelInvoices.get(invoiceId).getInvoice();
+    }
+
+    public State getInvoiceState(UUID invoiceId){
+        if(!channelInvoices.containsKey(invoiceId)){
+            throw new NullPointerException("No invoice with this id");
+        }
+        return channelInvoices.get(invoiceId).getState();
+    }
+
+    public Set<UUID> getInvoiceIds(){
+        return channelInvoices.keySet();
+    }
+
+    public void checkPaymentIncreaseFulfillsInvoice(Coin by, String invoiceIdString){
+        try{
+            UUID invoiceId = UUID.fromString(invoiceIdString);
+            if(channelInvoices.containsKey(invoiceId)){
+                PaymentChannelInvoice paymentChannelInvoice = channelInvoices.get(invoiceId);
+                if(paymentChannelInvoice.increasePaidSum(by)){
+                    logger.info("Invoice {} is now fully paid",invoiceId);
+                }else{
+                    logger.info("Invoice {} is now paid by {} percent",invoiceId,
+                            100.0 * (float)paymentChannelInvoice.getPaidCoins().getValue() / (float)paymentChannelInvoice.getTotalAmount().getValue());
+                }
+
+            }else {
+                logger.warn("Got payment for invoice we do not know: {}",invoiceId);
+            }
+        }catch (IllegalArgumentException e){
+            logger.warn("The given invoiceIdString is no UUID: {}",invoiceIdString);
+        }
+
+
+
+    }
 
     @Nullable
     @Override
@@ -219,6 +283,7 @@ public class PaymentChannelServer implements PaymentChannelServerListener.Handle
             public ListenableFuture<ByteString> paymentIncrease(Coin by, Coin to, ByteString info) {
                 if(info != null){
                     logger.info("Client {} paid increased payment by {} for a total of {}, info string is {}", clientAddress, by, to, info.toStringUtf8());
+                    checkPaymentIncreaseFulfillsInvoice(by,info.toStringUtf8());
                 }else{
                     logger.info("Client {} paid increased payment by {} for a total of {}", clientAddress, by, to);
                 }
